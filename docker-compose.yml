@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # Aplicación POS
+  pos-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: solyverde-pos
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - pos-network
+    volumes:
+      # Persistencia de datos si es necesario
+      - pos-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+networks:
+  pos-network:
+    driver: bridge
+
+volumes:
+  pos-data:
+    driver: local

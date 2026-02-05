@@ -754,17 +754,24 @@ export async function obtenerEstado<T>(key: string): Promise<T | null> {
 // ========================================
 
 export async function obtenerNumeroVentaDiario(): Promise<number> {
-  const hoy = new Date().toISOString().split('T')[0];
-  const estado = await obtenerEstado<{ fecha: string; numero: number }>('ultimoNumeroVenta');
+  const { obtenerNumeroVentaAtomic } = await import('../utils/locks');
   
-  if (estado && estado.fecha === hoy) {
-    const nuevoNumero = estado.numero + 1;
-    await guardarEstado('ultimoNumeroVenta', { fecha: hoy, numero: nuevoNumero });
-    return nuevoNumero;
-  } else {
-    await guardarEstado('ultimoNumeroVenta', { fecha: hoy, numero: 1 });
-    return 1;
-  }
+  const hoy = new Date().toISOString().split('T')[0];
+  
+  return obtenerNumeroVentaAtomic(
+    async () => {
+      const estado = await obtenerEstado<{ fecha: string; numero: number }>('ultimoNumeroVenta');
+      
+      if (estado && estado.fecha === hoy) {
+        return estado.numero;
+      }
+      
+      return 0;
+    },
+    async (nuevoNumero) => {
+      await guardarEstado('ultimoNumeroVenta', { fecha: hoy, numero: nuevoNumero });
+    }
+  );
 }
 
 export async function guardarVenta(venta: Venta): Promise<void> {
