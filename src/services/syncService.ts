@@ -5,12 +5,17 @@
 
 import { db } from '../db/database';
 import { type ConfiguracionSistema, type SyncQueueItem } from '../types';
+import { SYNC_CONSTANTS } from '../utils/constants';
 
-// Constantes
-const MAX_INTENTOS = 5;
-const INTERVALO_SYNC = 30000; // 30 segundos
-const BATCH_SIZE = 20;
-const BACKOFF_BASE = 1000; // 1 segundo base para backoff exponencial
+// Constantes importadas
+const {
+  MAX_INTENTOS,
+  INTERVALO_SYNC,
+  BATCH_SIZE,
+  BACKOFF_BASE,
+  TIMEOUT_REQUEST,
+  MAX_BACKOFF
+} = SYNC_CONSTANTS;
 
 // Estado del servicio
 let syncInterval: ReturnType<typeof setInterval> | null = null;
@@ -23,7 +28,7 @@ let sincronizando = false;
 function calcularBackoffDelay(intentos: number): number {
   const exponential = BACKOFF_BASE * Math.pow(2, intentos);
   const jitter = Math.random() * 1000; // Añadir jitter aleatorio
-  return Math.min(exponential + jitter, 60000); // Max 60 segundos
+  return Math.min(exponential + jitter, MAX_BACKOFF);
 }
 
 // ========================================
@@ -141,7 +146,7 @@ async function sincronizarItem(item: SyncQueueItem, scriptUrl: string): Promise<
     
     // Enviar a Google Sheets con timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_REQUEST);
     
     try {
       const response = await fetch(scriptUrl, {
