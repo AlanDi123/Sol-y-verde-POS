@@ -28,6 +28,8 @@
     "dexie": "^3.2.4",
     "dexie-react-hooks": "^1.1.6",
     "escpos-buffer": "^4.0.3",
+    "jsbarcode": "^3.12.3",
+    "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
