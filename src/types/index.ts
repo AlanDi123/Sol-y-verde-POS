@@ -155,6 +155,7 @@ export interface Venta {
   totalEnvases: number;
   totalDevolucionEnvases: number;
   descuento: number;
+  descuentoDetalle?: Descuento; // Detalle del descuento aplicado
   total: number;
   // Pagos
   pagos: PagoVenta[];
@@ -170,6 +171,9 @@ export interface Venta {
   // Estado
   estado: EstadoVenta;
   valeGenerado?: string; // ID del vale si se generó crédito
+  // Alertas y problemas (para rol administrativo)
+  tieneProblemas?: boolean;
+  problemasReportados?: ProblemaVenta[];
   // Metadata
   vendedorId: string;
   vendedorNombre: string;
@@ -179,6 +183,17 @@ export interface Venta {
   sincronizado: boolean;
   impreso: boolean;
   observaciones?: string;
+}
+
+// Problemas reportados en ventas (por rol administrativo)
+export interface ProblemaVenta {
+  id: string;
+  tipo: 'error_precio' | 'error_cantidad' | 'error_pago' | 'error_envases' | 'otro';
+  descripcion: string;
+  reportadoPor: string; // ID del vendedor administrativo
+  reportadoEn: number; // Timestamp
+  resuelto: boolean;
+  resolucion?: string;
 }
 
 export interface ItemVenta {
@@ -252,7 +267,7 @@ export interface ConfigBanco {
 }
 
 // ========================================
-// GASTOS DE CAJA
+// GASTOS DE CAJA Y MOVIMIENTOS
 // ========================================
 
 export interface GastoCaja {
@@ -289,6 +304,31 @@ export const CATEGORIAS_GASTO: Record<CategoriaGasto, string> = {
   reparaciones: 'Reparaciones',
   otros: 'Otros'
 };
+
+// Movimientos de caja (entradas/salidas nocturnas)
+export interface MovimientoCaja {
+  id: string;
+  turnoId: string;
+  fecha: string;
+  tipo: 'entrada' | 'salida';
+  monto: number;
+  motivo: string;
+  descripcion?: string;
+  vendedorId: string;
+  vendedorNombre: string;
+  timestamp: number;
+  sincronizado: boolean;
+}
+
+// Descuentos aplicados a ventas
+export interface Descuento {
+  id: string;
+  tipo: 'porcentaje' | 'monto_fijo';
+  valor: number; // Porcentaje (ej: 10 para 10%) o monto fijo
+  razon: string; // Razón obligatoria del descuento
+  aplicadoPor: string; // ID del vendedor que aplicó el descuento
+  timestamp: number;
+}
 
 // ========================================
 // TURNOS Y CIERRE DE CAJA
@@ -423,25 +463,45 @@ export interface ChequeEnMano {
 // VENDEDORES Y AUTENTICACIÓN
 // ========================================
 
+export type RolVendedor = 'dueno' | 'vendedor' | 'administrativo';
+
 export interface Vendedor {
   id: string;
   nombre: string;
-  pin: string; // PIN de 4 dígitos hasheado
+  pin: string; // PIN hasheado con bcrypt
   activo: boolean;
-  esAdmin: boolean;
-  rol?: 'admin' | 'vendedor'; // Rol del usuario
+  esAdmin: boolean; // Deprecated - usar rol en su lugar
+  rol: RolVendedor; // Rol del usuario
   permisos: PermisosVendedor;
   fechaCreacion: number;
   ultimoAcceso?: number;
+  email?: string;
+  telefono?: string;
 }
 
 export interface PermisosVendedor {
+  // Permisos de ventas
+  puedeRegistrarVentas: boolean;
+  puedeEditarVentas: boolean;
   puedeAnularVentas: boolean;
   puedeModificarPrecios: boolean;
+  puedeAplicarDescuentos: boolean;
+  
+  // Permisos de caja
   puedeHacerCierres: boolean;
+  puedeEditarCierresCerrados: boolean;
+  puedeIngresarGastos: boolean;
+  puedeIngresarMovimientos: boolean; // Movimientos nocturnos
+  
+  // Permisos de administración
   puedeVerReportes: boolean;
   puedeEditarProductos: boolean;
   puedeEditarConfig: boolean;
+  puedeGestionarUsuarios: boolean;
+  
+  // Notificaciones y alertas
+  puedeNotificarErrores: boolean;
+  puedeMarcarProblemasVentas: boolean;
 }
 
 export interface SesionVendedor {

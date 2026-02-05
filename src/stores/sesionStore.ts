@@ -128,10 +128,35 @@ export const useSesionStore = create<SesionState>((set, get) => ({
     try {
       set({ cargando: true, error: null });
       
-      // Buscar vendedor por PIN
-      const vendedor = await db.vendedores
-        .filter(v => v.pin === pin && v.activo)
-        .first();
+      // Importar función de verificación de PIN
+      const { verificarPIN } = await import('../utils/security');
+      const { validarPIN } = await import('../utils/validacion');
+      
+      // Validar formato del PIN
+      try {
+        validarPIN(pin);
+      } catch (error) {
+        set({ 
+          cargando: false, 
+          error: 'PIN inválido' 
+        });
+        return false;
+      }
+      
+      // Obtener todos los vendedores activos
+      const vendedores = await db.vendedores
+        .filter(v => v.activo)
+        .toArray();
+      
+      // Buscar vendedor comparando PINs hasheados
+      let vendedor: typeof vendedores[0] | null = null;
+      for (const v of vendedores) {
+        const esValido = await verificarPIN(pin, v.pin);
+        if (esValido) {
+          vendedor = v;
+          break;
+        }
+      }
       
       if (!vendedor) {
         set({ 

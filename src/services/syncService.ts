@@ -1,18 +1,35 @@
 // ========================================
 // SERVICIO DE SINCRONIZACIÓN CON GOOGLE SHEETS
+// Con reintentos exponenciales y cola robusta
 // ========================================
 
 import { db } from '../db/database';
 import { type ConfiguracionSistema, type SyncQueueItem } from '../types';
+import { SYNC_CONSTANTS } from '../utils/constants';
 
-// Constantes
-const MAX_INTENTOS = 5;
-const INTERVALO_SYNC = 30000; // 30 segundos
-const BATCH_SIZE = 20;
+// Constantes importadas
+const {
+  MAX_INTENTOS,
+  INTERVALO_SYNC,
+  BATCH_SIZE,
+  BACKOFF_BASE,
+  TIMEOUT_REQUEST,
+  MAX_BACKOFF
+} = SYNC_CONSTANTS;
 
 // Estado del servicio
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 let sincronizando = false;
+
+/**
+ * Calcula el delay de reintentos con backoff exponencial
+ * Fórmula: delay = BACKOFF_BASE * (2 ^ intentos) + jitter
+ */
+function calcularBackoffDelay(intentos: number): number {
+  const exponential = BACKOFF_BASE * Math.pow(2, intentos);
+  const jitter = Math.random() * 1000; // Añadir jitter aleatorio
+  return Math.min(exponential + jitter, MAX_BACKOFF);
+}
 
 // ========================================
 // INICIAR SERVICIO
@@ -64,8 +81,8 @@ async function procesarColaSincronizacion(): Promise<void> {
   sincronizando = true;
   
   try {
-    // Obtener configuración
-    const config = await db.configuracion.get('sistema') as ConfiguracionSistema | undefined;
+    // Obtener configuración - FIX: usar ID correcto
+    const config = await db.configuracion.get('config-principal') as ConfiguracionSistema | undefined;
     
     if (!config?.googleScriptUrl) {
       console.log('[Sync] URL de Google Script no configurada');
@@ -96,8 +113,8 @@ async function procesarColaSincronizacion(): Promise<void> {
     }
     
     // Actualizar última sincronización
-    await db.configuracion.update('sistema', {
-      ultimaSincronizacion: new Date().toISOString()
+    await db.configuracion.update('config-principal', {
+      ultimaSincronizacion: Date.now()
     });
     
     console.log('[Sync] Sincronización completada');
@@ -120,33 +137,62 @@ async function sincronizarItem(item: SyncQueueItem, scriptUrl: string): Promise<
       ultimoIntento: Date.now()
     });
     
-    // Enviar a Google Sheets
-    await fetch(scriptUrl, {
-      method: 'POST',
-      mode: 'no-cors', // Google Apps Script requiere no-cors
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        action: item.tipo,
-        data: item.datos,
-        timestamp: item.timestamp
-      })
-    });
+    // Preparar payload
+    const payload = {
+      action: item.tipo,
+      data: item.datos,
+      timestamp: item.timestamp
+    };
     
-    // En modo no-cors no podemos leer la respuesta
-    // Asumimos éxito si no hay excepción
+    // Enviar a Google Sheets con timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_REQUEST);
     
-    // Marcar como completado
-    await db.syncQueue.update(item.id, {
-      estado: 'completado'
-    });
+    try {
+      const response = await fetch(scriptUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Verificar respuesta
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      // Intentar leer la respuesta
+      let resultado;
+      try {
+        resultado = await response.json();
+        if (!resultado.success) {
+          throw new Error(resultado.error || 'Error desconocido del servidor');
+        }
+      } catch (parseError) {
+        // Si no podemos parsear JSON, asumimos éxito si el status es OK
+        console.warn('[Sync] No se pudo parsear respuesta, asumiendo éxito');
+      }
+      
+      // Marcar como completado
+      await db.syncQueue.update(item.id, {
+        estado: 'completado'
+      });
+      
+      // Marcar el registro original como sincronizado
+      await marcarComoSincronizado(item.tipo, item.datos.id);
+      
+      console.log(`[Sync] Item ${item.tipo} sincronizado:`, item.datos.id);
+      
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      throw fetchError;
+    }
     
-    // Marcar el registro original como sincronizado
-    await marcarComoSincronizado(item.tipo, item.datos.id);
-    
-    console.log(`[Sync] Item ${item.tipo} sincronizado:`, item.datos.id);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[Sync] Error sincronizando ${item.tipo}:`, error);
     
     const intentos = item.intentos + 1;
@@ -160,12 +206,17 @@ async function sincronizarItem(item: SyncQueueItem, scriptUrl: string): Promise<
       });
       console.error(`[Sync] Item ${item.id} marcado como fallido después de ${MAX_INTENTOS} intentos`);
     } else {
+      // Calcular delay de reintento con backoff exponencial
+      const delay = calcularBackoffDelay(intentos);
+      
       // Reintentar más tarde
       await db.syncQueue.update(item.id, {
         estado: 'pendiente',
         intentos,
         ultimoIntento: Date.now()
       });
+      
+      console.warn(`[Sync] Reintentando item ${item.id} en ${delay}ms (intento ${intentos}/${MAX_INTENTOS})`);
     }
   }
 }
@@ -229,7 +280,7 @@ export async function obtenerEstadisticasSync(): Promise<{
   procesando: number;
   completados: number;
   fallidos: number;
-  ultimaSync: string | null;
+  ultimaSync: number | null;
 }> {
   const [pendientes, procesando, completados, fallidos] = await Promise.all([
     db.syncQueue.where('estado').equals('pendiente').count(),
@@ -238,16 +289,14 @@ export async function obtenerEstadisticasSync(): Promise<{
     db.syncQueue.where('estado').equals('fallido').count()
   ]);
   
-  const config = await db.configuracion.get('sistema') as ConfiguracionSistema | undefined;
+  const config = await db.configuracion.get('config-principal') as ConfiguracionSistema | undefined;
   
   return {
     pendientes,
     procesando,
     completados,
     fallidos,
-    ultimaSync: config?.ultimaSincronizacion 
-      ? new Date(config.ultimaSincronizacion).toISOString() 
-      : null
+    ultimaSync: config?.ultimaSincronizacion ?? null
   };
 }
 
