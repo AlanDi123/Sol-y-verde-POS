@@ -1,6 +1,6 @@
 // ========================================
 // BASE DE DATOS DEXIE.JS - PERSISTENCIA BUNKER-LEVEL
-// Sol y Verde POS v2.0
+// Sol y Verde POS v3.0
 // ========================================
 
 import Dexie, { Table } from 'dexie';
@@ -12,6 +12,7 @@ import type {
   Vale,
   Venta,
   GastoCaja,
+  MovimientoCaja,
   Turno,
   CierreCaja,
   Vendedor,
@@ -37,6 +38,7 @@ export class SolYVerdeDB extends Dexie {
   ventas!: Table<Venta, string>;
   gastosCaja!: Table<GastoCaja, string>;
   gastos!: Table<GastoCaja, string>; // Alias para gastosCaja
+  movimientosCaja!: Table<MovimientoCaja, string>; // NUEVO: movimientos nocturnos
   turnos!: Table<Turno, string>;
   cierresCaja!: Table<CierreCaja, string>;
   vendedores!: Table<Vendedor, string>;
@@ -73,16 +75,17 @@ export class SolYVerdeDB extends Dexie {
       // Ventas: múltiples índices para reportes
       ventas: 'id, numero, estado, vendedorId, turnoId, timestamp, sincronizado, fechaFormateada',
       
-      // Gastos
+      // Gastos y movimientos de caja
       gastosCaja: 'id, categoria, vendedorId, turnoId, timestamp, sincronizado',
       gastos: 'id, categoria, vendedorId, turnoId, timestamp, sincronizado',
+      movimientosCaja: 'id, tipo, turnoId, vendedorId, timestamp, sincronizado',
       
       // Turnos y cierres
       turnos: 'id, numero, vendedorId, estado, fechaInicio, sincronizado',
       cierresCaja: 'id, turnoId, timestamp, sincronizado',
       
       // Usuarios
-      vendedores: 'id, nombre, activo',
+      vendedores: 'id, nombre, activo, rol',
       sesiones: 'id, vendedorId, turnoId, activa',
       
       // Configuración
@@ -210,8 +213,9 @@ export async function inicializarBaseDatos(): Promise<void> {
     ]);
 
     // Crear vendedor admin por defecto con PIN hasheado
-    // Importamos la función de hashing
+    // Importamos la función de hashing y permisos
     const { hashearPIN } = await import('../utils/security');
+    const { obtenerPermisosPorRol } = await import('../utils/roles');
     const pinHasheado = await hashearPIN('1234');
     
     await db.vendedores.put({
@@ -219,16 +223,12 @@ export async function inicializarBaseDatos(): Promise<void> {
       nombre: 'Administrador',
       pin: pinHasheado, // PIN hasheado con bcrypt
       activo: true,
-      esAdmin: true,
-      permisos: {
-        puedeAnularVentas: true,
-        puedeModificarPrecios: true,
-        puedeHacerCierres: true,
-        puedeVerReportes: true,
-        puedeEditarProductos: true,
-        puedeEditarConfig: true
-      },
-      fechaCreacion: Date.now()
+      esAdmin: true, // Mantener por compatibilidad
+      rol: 'dueno',
+      permisos: obtenerPermisosPorRol('dueno'),
+      fechaCreacion: Date.now(),
+      email: 'admin@solyverde.com',
+      telefono: ''
     });
 
     // Crear productos de ejemplo
