@@ -1,0 +1,370 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   ESTILOS GLOBALES - SOL Y VERDE POS
+   ======================================== */
+
+/* Variables CSS */
+:root {
+  --color-primary: #22c55e;
+  --color-primary-dark: #16a34a;
+  --color-background: #1a1a2e;
+  --color-surface: #252538;
+  --color-surface-light: #2d2d44;
+  --color-text: #ffffff;
+  --color-text-muted: #a1a1aa;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-success: #22c55e;
+  --color-info: #3b82f6;
+  
+  /* Espaciado para botones de productos */
+  --btn-size: 120px;
+  --btn-gap: 8px;
+}
+
+/* Reset y base */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* ========================================
+   COMPONENTES PERSONALIZADOS
+   ======================================== */
+
+/* Botón de producto base */
+@layer components {
+  .btn-product {
+    @apply relative flex flex-col items-center justify-center 
+           bg-dark-200 hover:bg-dark-100
+           rounded-xl p-2 transition-all duration-50
+           shadow-product hover:shadow-product-hover
+           min-w-[120px] min-h-[120px]
+           cursor-pointer select-none;
+  }
+  
+  .btn-product:active {
+    transform: scale(0.97);
+    background-color: rgba(34, 197, 94, 0.2);
+  }
+  
+  .btn-product.selected {
+    @apply ring-2 ring-green-500;
+    background-color: rgba(34, 197, 94, 0.1);
+  }
+  
+  .btn-product.agotado {
+    @apply opacity-60;
+  }
+  
+  /* Botón de acción grande */
+  .btn-action {
+    @apply flex items-center justify-center gap-2
+           px-6 py-4 rounded-xl font-semibold text-lg
+           transition-all duration-50 active:scale-95;
+  }
+  
+  .btn-action-primary {
+    @apply btn-action bg-primary text-white hover:bg-green-700;
+  }
+  
+  .btn-action-secondary {
+    @apply btn-action bg-dark-200 text-white hover:bg-dark-100;
+  }
+  
+  .btn-action-danger {
+    @apply btn-action bg-danger text-white hover:bg-red-700;
+  }
+  
+  /* Botón de numpad */
+  .btn-numpad {
+    @apply flex items-center justify-center
+           bg-dark-200 hover:bg-dark-100
+           rounded-xl text-3xl font-bold
+           min-h-[70px] transition-all duration-50
+           active:scale-95;
+  }
+  
+  .btn-numpad:active {
+    background-color: rgba(34, 197, 94, 0.3);
+  }
+  
+  .btn-numpad-action {
+    @apply btn-numpad bg-primary hover:bg-green-700 text-white;
+  }
+  
+  .btn-numpad-delete {
+    @apply btn-numpad bg-danger hover:bg-red-700 text-white;
+  }
+  
+  /* Input estilizado */
+  .input-dark {
+    @apply w-full bg-dark-300 border border-dark-100 rounded-lg
+           px-4 py-3 text-white placeholder-zinc-500
+           focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
+           transition-all;
+  }
+  
+  /* Badge de stock */
+  .badge-stock {
+    @apply absolute top-1 right-1 px-2 py-0.5 rounded-full
+           text-xs font-bold bg-dark-300 text-white;
+  }
+  
+  .badge-stock.low {
+    @apply bg-warning text-black;
+  }
+  
+  .badge-stock.out {
+    @apply bg-danger text-white;
+  }
+  
+  /* Banner de agotado */
+  .banner-agotado {
+    @apply absolute inset-0 flex items-center justify-center
+           bg-black/60 rounded-xl;
+  }
+  
+  .banner-agotado span {
+    @apply bg-danger px-3 py-1 rounded text-sm font-bold
+           transform -rotate-12;
+  }
+  
+  /* Carrito item */
+  .cart-item {
+    @apply flex items-center justify-between
+           bg-dark-300 rounded-lg p-3
+           hover:bg-dark-200 cursor-pointer
+           transition-all duration-100;
+  }
+  
+  .cart-item:active {
+    background-color: rgba(34, 197, 94, 0.2);
+  }
+  
+  /* Panel lateral */
+  .panel-lateral {
+    @apply fixed top-0 right-0 h-full w-full max-w-md
+           bg-dark-400 shadow-overlay z-50
+           transform transition-transform duration-200;
+  }
+  
+  .panel-lateral.cerrado {
+    @apply translate-x-full;
+  }
+  
+  /* Modal overlay */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/70 backdrop-blur-sm
+           flex items-center justify-center z-50
+           animate-fade-in;
+  }
+  
+  .modal-content {
+    @apply bg-dark-300 rounded-2xl shadow-overlay
+           max-h-[90vh] overflow-auto
+           animate-scale-in;
+  }
+  
+  /* Precio grande */
+  .precio-xl {
+    @apply text-4xl font-bold text-primary font-mono;
+  }
+  
+  .precio-lg {
+    @apply text-2xl font-bold text-white font-mono;
+  }
+  
+  /* Categoría pill */
+  .categoria-pill {
+    @apply px-4 py-2 rounded-full text-sm font-medium
+           bg-dark-200 text-white hover:bg-dark-100
+           transition-all cursor-pointer;
+  }
+  
+  .categoria-pill.active {
+    @apply bg-primary text-white;
+  }
+}
+
+/* ========================================
+   ANIMACIONES
+   ======================================== */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { 
+    opacity: 0; 
+    transform: scale(0.9);
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-up {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  50% { 
+    box-shadow: 0 0 20px 10px rgba(34, 197, 94, 0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 0.5s ease-out;
+}
+
+/* ========================================
+   UTILIDADES ADICIONALES
+   ======================================== */
+
+/* Texto con gradiente */
+.text-gradient {
+  @apply bg-gradient-to-r from-primary to-emerald-400 
+         bg-clip-text text-transparent;
+}
+
+/* Efecto de presión */
+.pressable {
+  @apply transition-transform duration-50 active:scale-95;
+}
+
+/* Ocultar en móvil */
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Ocultar en desktop */
+@media (min-width: 769px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* Grid de productos responsive */
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+
+@media (min-width: 1024px) {
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+    padding: 12px;
+  }
+}
+
+/* Línea divisora */
+.divider {
+  @apply border-t border-dark-100 my-4;
+}
+
+/* Estado de carga */
+.skeleton {
+  @apply bg-dark-200 animate-pulse rounded;
+}
+
+/* Notificación toast */
+.toast {
+  @apply fixed bottom-4 right-4 max-w-sm p-4 rounded-xl shadow-overlay
+         animate-slide-up z-[100];
+}
+
+.toast-success {
+  @apply toast bg-success text-white;
+}
+
+.toast-error {
+  @apply toast bg-danger text-white;
+}
+
+.toast-warning {
+  @apply toast bg-warning text-black;
+}
+
+.toast-info {
+  @apply toast bg-info text-white;
+}
+
+/* Evitar overflow en landscape móvil */
+@media (max-height: 500px) {
+  .btn-product {
+    min-height: 100px;
+  }
+  
+  .btn-numpad {
+    min-height: 50px;
+  }
+}
