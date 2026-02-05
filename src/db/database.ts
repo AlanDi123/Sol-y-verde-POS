@@ -209,11 +209,15 @@ export async function inicializarBaseDatos(): Promise<void> {
       { id: 'banco-santander', nombre: 'Santander', alias: 'SOLYVERDE.SANTANDER', activo: false, orden: 4 },
     ]);
 
-    // Crear vendedor admin por defecto
+    // Crear vendedor admin por defecto con PIN hasheado
+    // Importamos la función de hashing
+    const { hashearPIN } = await import('../utils/security');
+    const pinHasheado = await hashearPIN('1234');
+    
     await db.vendedores.put({
       id: 'vendedor-admin',
       nombre: 'Administrador',
-      pin: '1234', // En producción debería estar hasheado
+      pin: pinHasheado, // PIN hasheado con bcrypt
       activo: true,
       esAdmin: true,
       permisos: {

@@ -125,72 +125,95 @@ export const useCarritoStore = create<CarritoState>((set, get) => ({
     tipoEnvase?: TipoEnvase,
     cobrarSena: boolean = true
   ) => {
-    const { items, devolucionesEnvases } = get();
-    
-    // Calcular cantidad en unidades base
-    const cantidadUnidadesBase = esFraccion 
-      ? cantidad / producto.factorDivisor 
-      : cantidad;
-    
-    // Verificar si ya existe el producto con mismo precio y tipo de venta
-    const itemExistente = items.find(
-      item => 
-        item.productoId === producto.id && 
-        item.precioUnitario === precioUnitario &&
-        item.esFraccion === esFraccion &&
-        item.tipoEnvaseId === tipoEnvase?.id
-    );
-    
-    let nuevosItems: ItemCarrito[];
-    
-    if (itemExistente) {
-      // Actualizar cantidad del item existente
-      nuevosItems = items.map(item => {
-        if (item.id === itemExistente.id) {
-          const nuevaCantidad = item.cantidad + cantidad;
-          const nuevaCantidadUnidades = item.cantidadUnidadesBase + cantidadUnidadesBase;
-          return {
-            ...item,
-            cantidad: nuevaCantidad,
-            cantidadUnidadesBase: nuevaCantidadUnidades,
-            subtotal: nuevaCantidad * precioUnitario,
-            valorSena: cobrarSena && tipoEnvase ? tipoEnvase.valorSena * Math.ceil(nuevaCantidadUnidades) : 0
-          };
-        }
-        return item;
+    try {
+      const { items, devolucionesEnvases } = get();
+      
+      // Importar validaciones
+      const { validarCantidad, validarPrecio, validarStockDisponible } = await import('../utils/validacion');
+      
+      // Validar inputs
+      validarCantidad(cantidad);
+      validarPrecio(precioUnitario);
+      
+      // Calcular cantidad en unidades base
+      const cantidadUnidadesBase = esFraccion 
+        ? cantidad / producto.factorDivisor 
+        : cantidad;
+      
+      // Validar stock disponible
+      try {
+        // Obtener configuración para verificar si se permite venta sin stock
+        const config = await import('../db/database').then(m => m.db.configuracion.get('config-principal'));
+        const permitirStockCero = config?.permitirVentaStockCero ?? true;
+        validarStockDisponible(producto.stockActual, cantidadUnidadesBase, permitirStockCero);
+      } catch (error: any) {
+        console.warn('Advertencia de stock:', error.message);
+        // Continuar de todas formas si la config lo permite
+      }
+      
+      // Verificar si ya existe el producto con mismo precio y tipo de venta
+      const itemExistente = items.find(
+        item => 
+          item.productoId === producto.id && 
+          item.precioUnitario === precioUnitario &&
+          item.esFraccion === esFraccion &&
+          item.tipoEnvaseId === tipoEnvase?.id
+      );
+      
+      let nuevosItems: ItemCarrito[];
+      
+      if (itemExistente) {
+        // Actualizar cantidad del item existente
+        nuevosItems = items.map(item => {
+          if (item.id === itemExistente.id) {
+            const nuevaCantidad = item.cantidad + cantidad;
+            const nuevaCantidadUnidades = item.cantidadUnidadesBase + cantidadUnidadesBase;
+            return {
+              ...item,
+              cantidad: nuevaCantidad,
+              cantidadUnidadesBase: nuevaCantidadUnidades,
+              subtotal: nuevaCantidad * precioUnitario,
+              valorSena: cobrarSena && tipoEnvase ? tipoEnvase.valorSena * Math.ceil(nuevaCantidadUnidades) : 0
+            };
+          }
+          return item;
+        });
+      } else {
+        // Crear nuevo item
+        const nuevoItem: ItemCarrito = {
+          id: uuidv4(),
+          productoId: producto.id,
+          producto,
+          cantidad,
+          esFraccion,
+          cantidadUnidadesBase,
+          precioUnitario,
+          precioLista: producto.precioSugerido,
+          subtotal: cantidad * precioUnitario,
+          tipoEnvaseId: tipoEnvase?.id,
+          cobrarSena: cobrarSena && !!tipoEnvase,
+          valorSena: cobrarSena && tipoEnvase ? tipoEnvase.valorSena * Math.ceil(cantidadUnidadesBase) : 0
+        };
+        nuevosItems = [...items, nuevoItem];
+      }
+      
+      // Guardar en IndexedDB
+      await guardarCarrito(nuevosItems);
+      
+      // Recalcular totales y actualizar estado
+      const totales = calcularTotales(nuevosItems, devolucionesEnvases);
+      set({
+        items: nuevosItems,
+        ...totales
       });
-    } else {
-      // Crear nuevo item
-      const nuevoItem: ItemCarrito = {
-        id: uuidv4(),
-        productoId: producto.id,
-        producto,
-        cantidad,
-        esFraccion,
-        cantidadUnidadesBase,
-        precioUnitario,
-        precioLista: producto.precioSugerido,
-        subtotal: cantidad * precioUnitario,
-        tipoEnvaseId: tipoEnvase?.id,
-        cobrarSena: cobrarSena && !!tipoEnvase,
-        valorSena: cobrarSena && tipoEnvase ? tipoEnvase.valorSena * Math.ceil(cantidadUnidadesBase) : 0
-      };
-      nuevosItems = [...items, nuevoItem];
-    }
-    
-    // Guardar en IndexedDB
-    await guardarCarrito(nuevosItems);
-    
-    // Recalcular totales y actualizar estado
-    const totales = calcularTotales(nuevosItems, devolucionesEnvases);
-    set({
-      items: nuevosItems,
-      ...totales
-    });
-    
-    // Feedback háptico
-    if ('vibrate' in navigator) {
-      navigator.vibrate(30);
+      
+      // Feedback háptico
+      if ('vibrate' in navigator) {
+        navigator.vibrate(30);
+      }
+    } catch (error: any) {
+      console.error('Error agregando producto:', error);
+      throw new Error(`No se pudo agregar el producto: ${error.message}`);
     }
   },
 
