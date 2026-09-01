@@ -3,7 +3,15 @@
 // ========================================
 
 import { useState } from 'react';
-import type { Descuento } from '../types';
+
+interface Descuento {
+  id: string;
+  tipo: 'porcentaje' | 'monto_fijo';
+  valor: number;
+  razon: string;
+  aplicadoPor: string;
+  timestamp: number;
+}
 
 interface DescuentoModalProps {
   subtotal: number;

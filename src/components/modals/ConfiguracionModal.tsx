@@ -22,7 +22,7 @@ export function ConfiguracionModal({ onClose }: ConfiguracionModalProps) {
   const vendedorActual = useSesionStore(state => state.vendedorActual);
   
   // Si no es admin, solo mostrar backup
-  const esAdmin = vendedorActual?.rol === 'admin';
+  const esAdmin = String(vendedorActual?.rol) === 'admin';
   
   const tabs: Array<{ id: TabActiva; label: string; emoji: string; adminOnly?: boolean }> = [
     { id: 'general', label: 'General', emoji: '⚙️', adminOnly: true },

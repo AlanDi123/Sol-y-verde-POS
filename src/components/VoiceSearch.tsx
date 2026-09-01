@@ -3,7 +3,6 @@
 // ========================================
 
 import { useState, useEffect } from 'react';
-import { notificar } from '../stores/notificacionesStore';
 
 interface VoiceSearchProps {
   onResult: (transcript: string) => void;

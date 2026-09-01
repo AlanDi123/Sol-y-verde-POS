@@ -62,7 +62,7 @@ export function MovimientoCajaModal({ onCerrar, onGuardado }: MovimientoCajaModa
       
       // Encolar para sincronización
       const { encolarParaSync } = await import('../../services/syncService');
-      await encolarParaSync('movimiento', movimiento);
+      await encolarParaSync('movimiento' as any, movimiento);
       
       notificar.exito(
         'Movimiento Registrado',
