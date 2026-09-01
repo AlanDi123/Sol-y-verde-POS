@@ -11,6 +11,11 @@ import {
   guardarEstado,
   obtenerEstado
 } from '../db/database';
+import {
+  registrarIntentoFallido,
+  registrarLoginExitoso,
+  verificarBloqueoActivo
+} from '../utils/pinLockout';
 
 // ========================================
 // TIPOS DEL STORE
@@ -127,6 +132,15 @@ export const useSesionStore = create<SesionState>((set, get) => ({
   iniciarSesion: async (pin: string) => {
     try {
       set({ cargando: true, error: null });
+
+      const bloqueo = verificarBloqueoActivo();
+      if (bloqueo.bloqueado) {
+        set({
+          cargando: false,
+          error: `Demasiados intentos. Espere ${bloqueo.segundosRestantes} segundos.`
+        });
+        return false;
+      }
       
       // Importar función de verificación de PIN
       const { verificarPIN } = await import('../utils/security');
@@ -159,12 +173,15 @@ export const useSesionStore = create<SesionState>((set, get) => ({
       }
       
       if (!vendedor) {
+        registrarIntentoFallido();
         set({ 
           cargando: false, 
           error: 'PIN incorrecto o vendedor inactivo' 
         });
         return false;
       }
+
+      registrarLoginExitoso();
       
       // Verificar si hay turno activo
       let turno = await obtenerTurnoActivo();

@@ -29,7 +29,8 @@ export const UI_CONSTANTS = {
  */
 export const SYNC_CONSTANTS = {
   MAX_INTENTOS: 5,
-  INTERVALO_SYNC: 30000, // 30 segundos
+  INTERVALO_SYNC: 8000, // 8 segundos: subir cambios propios (venta, gasto, etc.)
+  INTERVALO_LIVE: 6000, // 6 segundos: bajar cambios de OTRAS tablets (stock, catálogo)
   BATCH_SIZE: 20,
   BACKOFF_BASE: 1000, // 1 segundo
   TIMEOUT_REQUEST: 10000, // 10 segundos

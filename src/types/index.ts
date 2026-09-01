@@ -616,6 +616,10 @@ export interface SyncQueueItem {
   intentos: number;
   ultimoIntento: number | null;
   estado: 'pendiente' | 'procesando' | 'completado' | 'fallido';
+  // Timestamp (Date.now()) antes del cual NO debe reintentarse este item.
+  // Aplica el backoff exponencial calculado en syncService en vez de
+  // ignorarlo y reintentar en el próximo tick del intervalo fijo.
+  proximoIntento?: number;
 }
 
 // Tipo para respuestas de la API de Google Sheets

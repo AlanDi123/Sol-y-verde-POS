@@ -89,12 +89,21 @@ async function procesarColaSincronizacion(): Promise<void> {
       return;
     }
     
-    // Obtener items pendientes
-    const pendientes = await db.syncQueue
+    // Obtener items pendientes cuyo backoff ya expiró (o que nunca tuvieron uno).
+    // Antes se traían TODOS los 'pendiente' sin mirar proximoIntento, lo que
+    // hacía que el backoff exponencial calculado en sincronizarItem() nunca
+    // se respetara: el item volvía a intentarse en el siguiente tick fijo
+    // de 30s igual, generando ráfagas de reintentos con mala señal nocturna.
+    const ahora = Date.now();
+    const candidatos = await db.syncQueue
       .where('estado')
       .equals('pendiente')
-      .limit(BATCH_SIZE)
+      .limit(BATCH_SIZE * 3) // margen para filtrar por proximoIntento
       .toArray();
+
+    const pendientes = candidatos
+      .filter(item => !item.proximoIntento || item.proximoIntento <= ahora)
+      .slice(0, BATCH_SIZE);
     
     if (pendientes.length === 0) {
       return;
@@ -102,9 +111,13 @@ async function procesarColaSincronizacion(): Promise<void> {
     
     console.log(`[Sync] Procesando ${pendientes.length} items...`);
     
-    // Procesar cada item
-    for (const item of pendientes) {
-      await sincronizarItem(item);
+    // Procesar en paralelo con un límite de concurrencia (no todo a la vez,
+    // para no saturar el Web App de Apps Script, pero tampoco uno por uno
+    // esperando el viaje de red completo de cada item como antes).
+    const CONCURRENCIA = 4;
+    for (let i = 0; i < pendientes.length; i += CONCURRENCIA) {
+      const lote = pendientes.slice(i, i + CONCURRENCIA);
+      await Promise.allSettled(lote.map(item => sincronizarItem(item)));
     }
     
     // Actualizar última sincronización
@@ -163,14 +176,16 @@ async function sincronizarItem(item: SyncQueueItem): Promise<void> {
       });
       console.error(`[Sync] Item ${item.id} marcado como fallido después de ${MAX_INTENTOS} intentos`);
     } else {
-      // Calcular delay de reintento con backoff exponencial
+      // Calcular delay de reintento con backoff exponencial y ahora sí
+      // GUARDARLO como proximoIntento, para que procesarColaSincronizacion
+      // lo respete en vez de reintentar en el próximo tick fijo igual.
       const delay = calcularBackoffDelay(intentos);
-      
-      // Reintentar más tarde
+
       await db.syncQueue.update(item.id, {
         estado: 'pendiente',
         intentos,
-        ultimoIntento: Date.now()
+        ultimoIntento: Date.now(),
+        proximoIntento: Date.now() + delay
       });
       
       console.warn(`[Sync] Reintentando item ${item.id} en ${delay}ms (intento ${intentos}/${MAX_INTENTOS})`);

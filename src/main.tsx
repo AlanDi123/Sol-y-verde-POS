@@ -7,6 +7,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { iniciarServicioSync } from './services/syncService';
+import { iniciarLiveSync } from './services/liveSync';
 import { db } from './db/database';
 
 // Inicializar la base de datos y luego la aplicación
@@ -16,9 +17,13 @@ async function inicializar() {
     await db.open();
     console.log('✅ Base de datos inicializada');
     
-    // Iniciar servicio de sincronización
+    // Iniciar servicio de sincronización (sube ventas/gastos/etc. propios)
     iniciarServicioSync();
     console.log('✅ Servicio de sincronización iniciado');
+
+    // Iniciar servicio de estado en vivo (baja stock/catálogo de otras tablets)
+    iniciarLiveSync();
+    console.log('✅ Servicio de estado en vivo iniciado');
     
   } catch (error) {
     console.error('❌ Error inicializando:', error);
