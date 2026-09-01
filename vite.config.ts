@@ -1,71 +1,29 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 
 export default defineConfig({
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
-      manifest: {
-        name: 'Sol y Verde POS',
-        short_name: 'SyV POS',
-        description: 'Sistema de Punto de Venta para Mercado Mayorista Frutihortícola',
-        theme_color: '#1a1a2e',
-        background_color: '#1a1a2e',
-        display: 'standalone',
-        orientation: 'landscape',
-        start_url: '/',
-        icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          }
-        ]
-      },
-      devOptions: {
-        enabled: true
-      }
-    })
+    viteSingleFile(), // Empaqueta todo en el index.html
   ],
   optimizeDeps: {
-    exclude: ['dexie']
+    exclude: ['dexie'] // Dexie seguirá funcionando para la DB local
   },
   build: {
     target: 'esnext',
     minify: 'terser',
-    sourcemap: false
+    sourcemap: false,
+    
+    // Configuraciones obligatorias para vite-plugin-singlefile
+    assetsInlineLimit: 100000000, 
+    chunkSizeWarningLimit: 100000000,
+    cssCodeSplit: false,
+    rollupOptions: {
+      // Sintaxis actualizada para evitar el warning de deprecación
+      output: {
+        inlineDynamicImports: true,
+      }
+    }
   }
 });

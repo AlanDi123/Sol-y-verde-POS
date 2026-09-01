@@ -6,6 +6,7 @@
 import { db } from '../db/database';
 import { type ConfiguracionSistema, type SyncQueueItem } from '../types';
 import { SYNC_CONSTANTS } from '../utils/constants';
+import { runGoogleScript } from '../utils/gas';
 
 // Constantes importadas
 const {
@@ -13,7 +14,6 @@ const {
   INTERVALO_SYNC,
   BATCH_SIZE,
   BACKOFF_BASE,
-  TIMEOUT_REQUEST,
   MAX_BACKOFF
 } = SYNC_CONSTANTS;
 
@@ -84,12 +84,7 @@ async function procesarColaSincronizacion(): Promise<void> {
     // Obtener configuración - FIX: usar ID correcto
     const config = await db.configuracion.get('config-principal') as ConfiguracionSistema | undefined;
     
-    if (!config?.googleScriptUrl) {
-      console.log('[Sync] URL de Google Script no configurada');
-      return;
-    }
-    
-    if (config.modoOfflineForzado) {
+    if (config?.modoOfflineForzado) {
       console.log('[Sync] Modo offline forzado, omitiendo');
       return;
     }
@@ -109,7 +104,7 @@ async function procesarColaSincronizacion(): Promise<void> {
     
     // Procesar cada item
     for (const item of pendientes) {
-      await sincronizarItem(item, config.googleScriptUrl);
+      await sincronizarItem(item);
     }
     
     // Actualizar última sincronización
@@ -129,7 +124,7 @@ async function procesarColaSincronizacion(): Promise<void> {
 // SINCRONIZAR ITEM INDIVIDUAL
 // ========================================
 
-async function sincronizarItem(item: SyncQueueItem, scriptUrl: string): Promise<void> {
+async function sincronizarItem(item: SyncQueueItem): Promise<void> {
   try {
     // Marcar como procesando
     await db.syncQueue.update(item.id, {
@@ -137,60 +132,22 @@ async function sincronizarItem(item: SyncQueueItem, scriptUrl: string): Promise<
       ultimoIntento: Date.now()
     });
     
-    // Preparar payload
-    const payload = {
-      action: item.tipo,
-      data: item.datos,
-      timestamp: item.timestamp
-    };
-    
-    // Enviar a Google Sheets con timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_REQUEST);
-    
-    try {
-      const response = await fetch(scriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      // Verificar respuesta
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      // Intentar leer la respuesta
-      let resultado;
-      try {
-        resultado = await response.json();
-        if (!resultado.success) {
-          throw new Error(resultado.error || 'Error desconocido del servidor');
-        }
-      } catch (parseError) {
-        // Si no podemos parsear JSON, asumimos éxito si el status es OK
-        console.warn('[Sync] No se pudo parsear respuesta, asumiendo éxito');
-      }
-      
-      // Marcar como completado
-      await db.syncQueue.update(item.id, {
-        estado: 'completado'
-      });
-      
-      // Marcar el registro original como sincronizado
-      await marcarComoSincronizado(item.tipo, item.datos.id);
-      
-      console.log(`[Sync] Item ${item.tipo} sincronizado:`, item.datos.id);
-      
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      throw fetchError;
+    console.log(`[Sync] Enviando ${item.tipo} a Apps Script...`);
+    const response = await runGoogleScript('ejecutarAccion', item.tipo, item.datos);
+
+    if (!response?.success) {
+      throw new Error(response?.error || 'Apps Script no confirmó la sincronización');
     }
+
+    // Marcar como completado
+    await db.syncQueue.update(item.id, {
+      estado: 'completado'
+    });
+    
+    // Marcar el registro original como sincronizado
+    await marcarComoSincronizado(item.tipo, item.datos.id);
+    
+    console.log(`[Sync] Item ${item.tipo} sincronizado:`, item.datos.id);
     
   } catch (error: any) {
     console.error(`[Sync] Error sincronizando ${item.tipo}:`, error);
@@ -348,20 +305,15 @@ export async function limpiarColaCompletados(): Promise<number> {
 // SINCRONIZACIÓN BIDIRECCIONAL (PULL)
 // ========================================
 
-export async function sincronizarProductosDesdeSheets(scriptUrl: string): Promise<boolean> {
+export async function sincronizarProductosDesdeSheets(): Promise<boolean> {
   try {
-    // En una implementación real, esto haría un GET al script
-    // y actualizaría los productos locales
-    
-    const response = await fetch(`${scriptUrl}?action=getProductos`, {
-      method: 'GET'
-    });
-    
-    if (!response.ok) {
-      throw new Error('Error obteniendo productos');
+    const response = await runGoogleScript('obtenerProductos');
+
+    if (!response?.success || !Array.isArray(response.productos)) {
+      throw new Error(response?.error || 'Error obteniendo productos');
     }
     
-    const productos = await response.json();
+    const productos = response.productos;
     
     // Actualizar productos locales
     for (const producto of productos) {

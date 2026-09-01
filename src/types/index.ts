@@ -533,7 +533,6 @@ export interface ConfiguracionSistema {
   pieTicket: string;
   // Sincronización
   googleSheetId?: string;
-  googleScriptUrl?: string;
   sincronizacionAutomatica: boolean;
   intervaloSincronizacion: number; // minutos
   ultimaSincronizacion?: number; // Timestamp última sincronización

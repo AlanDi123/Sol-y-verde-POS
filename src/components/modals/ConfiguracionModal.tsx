@@ -142,17 +142,6 @@ function TabGeneral() {
         />
       </div>
       
-      <div>
-        <label className="text-zinc-400 text-sm">URL de Google Apps Script</label>
-        <input
-          type="text"
-          value={config.googleScriptUrl || ''}
-          onChange={(e) => guardar({ googleScriptUrl: e.target.value })}
-          placeholder="https://script.google.com/macros/s/..."
-          className="input-dark mt-1 font-mono text-xs"
-        />
-      </div>
-      
       <div className="pt-4 border-t border-dark-200">
         <div className="flex items-center justify-between">
           <div>

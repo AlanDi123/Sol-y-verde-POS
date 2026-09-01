@@ -341,9 +341,11 @@ function PasoEfectivo({
   const monto = parseFloat(montoEfectivo) || 0;
   const vuelto = monto > totalPendiente ? monto - totalPendiente : 0;
   
-  // Montos rápidos
+  // Montos rápidos para efectivo y vuelto.
   const montosRapidos = [
     totalPendiente,
+    Math.ceil(totalPendiente / 100) * 100,
+    Math.ceil(totalPendiente / 500) * 500,
     Math.ceil(totalPendiente / 1000) * 1000,
     Math.ceil(totalPendiente / 5000) * 5000,
     Math.ceil(totalPendiente / 10000) * 10000,

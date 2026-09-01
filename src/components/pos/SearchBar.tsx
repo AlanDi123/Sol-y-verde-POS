@@ -13,8 +13,8 @@ export function SearchBar() {
   // Atajo de teclado para enfocar búsqueda
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+F o F3 para buscar
-      if ((e.ctrlKey && e.key === 'f') || e.key === 'F3') {
+      // Ctrl+F, F1 o F3 para buscar
+      if ((e.ctrlKey && e.key === 'f') || e.key === 'F1' || e.key === 'F3') {
         e.preventDefault();
         inputRef.current?.focus();
       }
@@ -42,7 +42,7 @@ export function SearchBar() {
         type="text"
         value={terminoBusqueda}
         onChange={(e) => setBusqueda(e.target.value)}
-        placeholder="Buscar producto... (Ctrl+F)"
+        placeholder="Buscar producto... (F1)"
         className="w-full bg-dark-400 border border-dark-100 rounded-xl
                    pl-10 pr-10 py-3 text-white placeholder-zinc-500
                    focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent

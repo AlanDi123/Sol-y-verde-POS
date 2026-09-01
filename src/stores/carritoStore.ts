@@ -27,6 +27,14 @@ interface DevolucionEnvase {
   cantidad: number;
 }
 
+export interface VentaEnEspera {
+  id: string;
+  timestamp: number;
+  items: ItemCarrito[];
+  devolucionesEnvases: DevolucionEnvase[];
+  total: number;
+}
+
 interface CarritoState {
   // Items del carrito
   items: ItemCarrito[];
@@ -42,6 +50,9 @@ interface CarritoState {
   
   // Estado de carga
   cargado: boolean;
+
+  // Ventas pausadas durante la atención de otro cliente
+  ventasEnEspera: VentaEnEspera[];
   
   // Acciones
   cargarCarrito: () => Promise<void>;
@@ -52,6 +63,8 @@ interface CarritoState {
   actualizarDevolucionEnvase: (tipoEnvaseId: string, cantidad: number) => void;
   eliminarDevolucionEnvase: (tipoEnvaseId: string) => void;
   limpiarCarrito: () => Promise<void>;
+  pausarVenta: () => Promise<boolean>;
+  recuperarVenta: (ventaId: string) => Promise<boolean>;
   limpiarDevoluciones: () => void;
   recalcularTotales: () => void;
 }
@@ -98,6 +111,7 @@ export const useCarritoStore = create<CarritoState>((set, get) => ({
   totalDevolucionEnvases: 0,
   total: 0,
   cargado: false,
+  ventasEnEspera: [],
 
   // Cargar carrito desde IndexedDB al iniciar
   cargarCarrito: async () => {
@@ -345,6 +359,55 @@ export const useCarritoStore = create<CarritoState>((set, get) => ({
       totalDevolucionEnvases: 0,
       total: 0
     });
+  },
+
+  pausarVenta: async () => {
+    const { items, devolucionesEnvases, total } = get();
+
+    if (items.length === 0 && devolucionesEnvases.length === 0) {
+      return false;
+    }
+
+    const ventaEnEspera: VentaEnEspera = {
+      id: uuidv4(),
+      timestamp: Date.now(),
+      items,
+      devolucionesEnvases,
+      total
+    };
+
+    await limpiarCarritoDB();
+    set(state => ({
+      items: [],
+      devolucionesEnvases: [],
+      subtotalProductos: 0,
+      totalEnvasesCobrados: 0,
+      totalDevolucionEnvases: 0,
+      total: 0,
+      ventasEnEspera: [...state.ventasEnEspera, ventaEnEspera]
+    }));
+
+    return true;
+  },
+
+  recuperarVenta: async (ventaId: string) => {
+    const { ventasEnEspera } = get();
+    const ventaEnEspera = ventasEnEspera.find(venta => venta.id === ventaId);
+
+    if (!ventaEnEspera) {
+      return false;
+    }
+
+    await guardarCarrito(ventaEnEspera.items);
+    const totales = calcularTotales(ventaEnEspera.items, ventaEnEspera.devolucionesEnvases);
+    set({
+      items: ventaEnEspera.items,
+      devolucionesEnvases: ventaEnEspera.devolucionesEnvases,
+      ...totales,
+      ventasEnEspera: ventasEnEspera.filter(venta => venta.id !== ventaId)
+    });
+
+    return true;
   },
 
   // Limpiar solo devoluciones

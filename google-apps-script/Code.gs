@@ -33,28 +33,7 @@ function doPost(e) {
     const payload = data.data;
     
     logAction(action, 'INICIANDO', payload.id || 'N/A');
-    
-    let result;
-    
-    switch (action) {
-      case 'venta':
-        result = procesarVenta(payload);
-        break;
-      case 'vale':
-        result = procesarVale(payload);
-        break;
-      case 'gasto':
-        result = procesarGasto(payload);
-        break;
-      case 'cierre':
-        result = procesarCierre(payload);
-        break;
-      case 'turno':
-        result = procesarTurno(payload);
-        break;
-      default:
-        result = { success: false, error: 'Acción desconocida: ' + action };
-    }
+    const result = ejecutarAccion(action, payload);
     
     logAction(action, result.success ? 'OK' : 'ERROR', payload.id || 'N/A');
     
@@ -68,6 +47,23 @@ function doPost(e) {
       success: false,
       error: error.toString()
     })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function ejecutarAccion(action, payload) {
+  switch (action) {
+    case 'venta':
+      return procesarVenta(payload);
+    case 'vale':
+      return procesarVale(payload);
+    case 'gasto':
+      return procesarGasto(payload);
+    case 'cierre':
+      return procesarCierre(payload);
+    case 'turno':
+      return procesarTurno(payload);
+    default:
+      return { success: false, error: 'Acción desconocida: ' + action };
   }
 }
 

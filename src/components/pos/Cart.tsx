@@ -2,7 +2,8 @@
 // CARRITO DE COMPRAS
 // ========================================
 
-import { useCarritoStore } from '../../stores/carritoStore';
+import { useEffect, useState } from 'react';
+import { useCarritoStore, type VentaEnEspera } from '../../stores/carritoStore';
 import { useVentasStore } from '../../stores/ventasStore';
 import { useUIStore } from '../../stores/uiStore';
 import { formatearMoneda } from '../../types';
@@ -10,6 +11,7 @@ import { CartItem } from './CartItem';
 import { DevolucionItem } from './DevolucionItem';
 
 export function Cart() {
+  const [mostrarVentasEnEspera, setMostrarVentasEnEspera] = useState(false);
   const items = useCarritoStore(state => state.items);
   const devolucionesEnvases = useCarritoStore(state => state.devolucionesEnvases);
   const subtotalProductos = useCarritoStore(state => state.subtotalProductos);
@@ -17,12 +19,17 @@ export function Cart() {
   const totalDevolucionEnvases = useCarritoStore(state => state.totalDevolucionEnvases);
   const total = useCarritoStore(state => state.total);
   const limpiarCarrito = useCarritoStore(state => state.limpiarCarrito);
+  const ventasEnEspera = useCarritoStore(state => state.ventasEnEspera);
+  const pausarVenta = useCarritoStore(state => state.pausarVenta);
+  const recuperarVenta = useCarritoStore(state => state.recuperarVenta);
   
   const iniciarVenta = useVentasStore(state => state.iniciarVenta);
   const generarValeDevolucion = useVentasStore(state => state.generarValeDevolucion);
+  const ventaEnProceso = useVentasStore(state => state.ventaEnProceso);
   
   const abrirModal = useUIStore(state => state.abrirModal);
   const abrirConfirmacion = useUIStore(state => state.abrirConfirmacion);
+  const agregarNotificacion = useUIStore(state => state.agregarNotificacion);
   
   // Verificar si genera vale (devolución > compra)
   const montoNeto = subtotalProductos + totalEnvasesCobrados - totalDevolucionEnvases;
@@ -79,6 +86,55 @@ export function Cart() {
   };
   
   const carritoVacio = items.length === 0 && devolucionesEnvases.length === 0;
+
+  const handlePausarVenta = async () => {
+    if (ventaEnProceso) return;
+
+    const pausada = await pausarVenta();
+    if (pausada) {
+      agregarNotificacion('info', 'Venta en espera', 'La venta se guardó para continuarla más tarde.');
+    }
+  };
+
+  const handleRecuperarVenta = (venta: VentaEnEspera) => {
+    const recuperar = async () => {
+      const recuperada = await recuperarVenta(venta.id);
+      if (recuperada) {
+        setMostrarVentasEnEspera(false);
+        agregarNotificacion('success', 'Venta recuperada', 'La venta volvió al carrito.');
+      }
+    };
+
+    if (carritoVacio) {
+      void recuperar();
+      return;
+    }
+
+    abrirConfirmacion({
+      titulo: 'Reemplazar carrito',
+      mensaje: 'El carrito actual será reemplazado por la venta en espera.',
+      textoConfirmar: 'Recuperar venta',
+      peligroso: true,
+      onConfirm: () => void recuperar()
+    });
+  };
+
+  useEffect(() => {
+    const manejarAtajo = (evento: KeyboardEvent) => {
+      if (evento.key === 'F2' && !carritoVacio && !ventaEnProceso) {
+        evento.preventDefault();
+        void handlePausarVenta();
+      }
+
+      if (evento.key === 'F4' && !carritoVacio && !ventaEnProceso) {
+        evento.preventDefault();
+        handleCobrar();
+      }
+    };
+
+    window.addEventListener('keydown', manejarAtajo);
+    return () => window.removeEventListener('keydown', manejarAtajo);
+  }, [carritoVacio, ventaEnProceso, pausarVenta, items, devolucionesEnvases]);
   
   return (
     <div className="flex flex-col h-full">
@@ -92,15 +148,25 @@ export function Cart() {
             </span>
           )}
         </h2>
-        
-        {!carritoVacio && (
-          <button
-            onClick={handleLimpiar}
-            className="text-zinc-400 hover:text-danger transition-colors text-sm"
-          >
-            Limpiar
-          </button>
-        )}
+
+        <div className="flex items-center gap-3">
+          {ventasEnEspera.length > 0 && (
+            <button
+              onClick={() => setMostrarVentasEnEspera(true)}
+              className="text-warning transition-colors text-sm"
+            >
+              ⏱ {ventasEnEspera.length}
+            </button>
+          )}
+          {!carritoVacio && (
+            <button
+              onClick={handleLimpiar}
+              className="text-zinc-400 hover:text-danger transition-colors text-sm"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
       </div>
       
       {/* Lista de items */}
@@ -174,7 +240,14 @@ export function Cart() {
         </div>
         
         {/* Botones de acción */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            onClick={() => void handlePausarVenta()}
+            disabled={carritoVacio || !!ventaEnProceso}
+            className="btn-action-secondary text-sm py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ⏸ Esperar
+          </button>
           <button
             onClick={() => abrirModal('devolucion-envases')}
             className="btn-action-secondary text-sm py-3"
@@ -185,6 +258,7 @@ export function Cart() {
           <button
             onClick={handleCobrar}
             disabled={carritoVacio}
+            title="Atajo: F4"
             className={`
               btn-action text-sm py-3 font-bold
               ${carritoVacio 
@@ -195,8 +269,52 @@ export function Cart() {
               }
             `}
           >
-            {generaVale ? '🎫 Generar Vale' : '💰 Cobrar'}
+            {generaVale ? '🎫 Generar Vale' : '💰 Cobrar (F4)'}
           </button>
+        </div>
+      </div>
+
+      {mostrarVentasEnEspera && (
+        <VentasEnEsperaModal
+          ventas={ventasEnEspera}
+          onClose={() => setMostrarVentasEnEspera(false)}
+          onRecuperar={handleRecuperarVenta}
+        />
+      )}
+    </div>
+  );
+}
+
+function VentasEnEsperaModal({
+  ventas,
+  onClose,
+  onRecuperar
+}: {
+  ventas: VentaEnEspera[];
+  onClose: () => void;
+  onRecuperar: (venta: VentaEnEspera) => void;
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content w-full max-w-md mx-4 p-0 overflow-hidden" onClick={evento => evento.stopPropagation()}>
+        <div className="flex items-center justify-between bg-dark-400 p-4">
+          <h3 className="text-lg font-bold text-white">Ventas en espera</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white text-xl" aria-label="Cerrar">✕</button>
+        </div>
+        <div className="max-h-96 space-y-3 overflow-y-auto p-4">
+          {ventas.map(venta => (
+            <div key={venta.id} className="flex items-center justify-between gap-3 rounded-lg bg-dark-400 p-3">
+              <div>
+                <p className="font-medium text-white">Venta {venta.id.slice(0, 6).toUpperCase()}</p>
+                <p className="text-sm text-zinc-400">
+                  {venta.items.length} productos · {formatearMoneda(venta.total)}
+                </p>
+              </div>
+              <button onClick={() => onRecuperar(venta)} className="btn-action-primary px-3 py-2 text-sm">
+                Recuperar
+              </button>
+            </div>
+          ))}
         </div>
       </div>
     </div>
