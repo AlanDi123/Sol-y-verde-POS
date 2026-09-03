@@ -112,10 +112,90 @@ export const db = new SolYVerdeDB();
 // INICIALIZACIÓN Y DATOS POR DEFECTO
 // ========================================
 
+// ========================================
+// GARANTÍA DE VENDEDOR ADMIN (independiente del resto de la config)
+// ========================================
+// Se ejecuta en cada arranque. Si ya hay al menos un vendedor, no toca
+// nada (no pisa PINs personalizados que el dueño ya haya configurado).
+// Solo crea el admin por defecto si la tabla está realmente vacía.
+export async function asegurarVendedorAdminExiste(): Promise<void> {
+  const cantidadVendedores = await db.vendedores.count();
+  if (cantidadVendedores > 0) return;
+
+  console.warn('⚠️ No se encontró ningún vendedor. Creando administrador por defecto (PIN 1234)...');
+
+  const { hashearPIN } = await import('../utils/security');
+  const { obtenerPermisosPorRol } = await import('../utils/roles');
+  const pinHasheado = await hashearPIN('1234');
+
+  await db.vendedores.put({
+    id: 'vendedor-admin',
+    nombre: 'Administrador',
+    pin: pinHasheado,
+    activo: true,
+    esAdmin: true,
+    rol: 'dueno',
+    permisos: obtenerPermisosPorRol('dueno'),
+    fechaCreacion: Date.now(),
+    email: 'admin@solyverde.com',
+    telefono: ''
+  });
+
+  console.log('✅ Vendedor administrador recreado. Ingresar con PIN 1234 y cambiarlo cuanto antes.');
+}
+
+// ========================================
+// AUTO-REPARACIÓN DE PINS CORRUPTOS
+// ========================================
+// Un hash de bcrypt siempre empieza con "$2a$", "$2b$" o "$2y$". Si algún
+// vendedor tiene en 'pin' un valor que NO tiene esa forma (por ejemplo,
+// alguien lo editó a mano en DevTools dejando el número en texto plano,
+// como pasó acá), verificarPIN() jamás va a poder validarlo, sin importar
+// qué PIN se escriba. Esta función corre en cada arranque, detecta esos
+// casos y re-hashea automáticamente, tomando el valor guardado como el
+// PIN real que se quiso poner.
+export async function repararHashesDePinCorruptos(): Promise<number> {
+  const { hashearPIN } = await import('../utils/security');
+  const vendedores = await db.vendedores.toArray();
+  let reparados = 0;
+
+  for (const v of vendedores) {
+    const pareceHashValido = /^\$2[aby]\$\d{2}\$/.test(v.pin || '');
+    if (pareceHashValido) continue;
+
+    // El valor guardado no es un hash válido: si parece un PIN de 4
+    // dígitos, lo re-hasheamos. Si no tiene ni esa forma, no podemos
+    // adivinar el PIN real, así que se deja como está y se avisa.
+    if (/^\d{4}$/.test(v.pin || '')) {
+      const nuevoHash = await hashearPIN(v.pin);
+      await db.vendedores.update(v.id, { pin: nuevoHash });
+      reparados++;
+      console.warn(`🔧 PIN de "${v.nombre}" no estaba hasheado. Reparado automáticamente.`);
+    } else {
+      console.error(`❌ El vendedor "${v.nombre}" tiene un PIN inválido y no se pudo reparar automáticamente. Debe restablecerlo manualmente.`);
+    }
+  }
+
+  return reparados;
+}
+
+
 export async function inicializarBaseDatos(): Promise<void> {
   try {
     // Verificar si ya está inicializada
     const config = await db.configuracion.get('config-principal');
+
+    // CORRECCIÓN: antes, si 'config' ya existía se cortaba acá y JAMÁS
+    // se volvía a verificar si el vendedor admin realmente se había
+    // creado. Si la inicialización se interrumpía justo entre el paso
+    // de guardar 'config' y el de crear el vendedor (recarga de página,
+    // pestaña pausada, etc.), quedaba una config "completa" pero sin
+    // ningún vendedor — y el login fallaba para siempre con
+    // "PIN incorrecto o vendedor inválido" sin que nada lo repare solo.
+    // Ahora, la existencia del vendedor admin se verifica SIEMPRE,
+    // de forma independiente, sin importar si 'config' ya existía.
+    await asegurarVendedorAdminExiste();
+
     if (config) {
       console.log('✅ Base de datos ya inicializada');
       return;
@@ -212,24 +292,9 @@ export async function inicializarBaseDatos(): Promise<void> {
       { id: 'banco-santander', nombre: 'Santander', alias: 'SOLYVERDE.SANTANDER', activo: false, orden: 4 },
     ]);
 
-    // Crear vendedor admin por defecto con PIN hasheado
-    // Importamos la función de hashing y permisos
-    const { hashearPIN } = await import('../utils/security');
-    const { obtenerPermisosPorRol } = await import('../utils/roles');
-    const pinHasheado = await hashearPIN('1234');
-    
-    await db.vendedores.put({
-      id: 'vendedor-admin',
-      nombre: 'Administrador',
-      pin: pinHasheado, // PIN hasheado con bcrypt
-      activo: true,
-      esAdmin: true, // Mantener por compatibilidad
-      rol: 'dueno',
-      permisos: obtenerPermisosPorRol('dueno'),
-      fechaCreacion: Date.now(),
-      email: 'admin@solyverde.com',
-      telefono: ''
-    });
+    // El vendedor administrador ya fue garantizado más arriba por
+    // asegurarVendedorAdminExiste(), independientemente de si esta es
+    // la primera vez o no.
 
     // Crear productos de ejemplo
     await crearProductosEjemplo();

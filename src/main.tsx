@@ -8,7 +8,15 @@ import App from './App';
 import './index.css';
 import { iniciarServicioSync } from './services/syncService';
 import { iniciarLiveSync } from './services/liveSync';
-import { db } from './db/database';
+import { asegurarVendedorAdminExiste, db, repararHashesDePinCorruptos } from './db/database';
+
+// Rescate de emergencia — abrir consola del navegador (F12) en la app y usar:
+//   solYVerdeRepararAdmin()   -> crea el admin (PIN 1234) SOLO si no hay ninguno
+//   solYVerdeRepararPines()   -> re-hashea cualquier PIN que haya quedado en
+//                                texto plano (por ejemplo por edición manual
+//                                en DevTools), sin tocar los que ya estén bien
+(window as any).solYVerdeRepararAdmin = asegurarVendedorAdminExiste;
+(window as any).solYVerdeRepararPines = repararHashesDePinCorruptos;
 
 // Inicializar la base de datos y luego la aplicación
 async function inicializar() {
@@ -24,6 +32,9 @@ async function inicializar() {
     // Iniciar servicio de estado en vivo (baja stock/catálogo de otras tablets)
     iniciarLiveSync();
     console.log('✅ Servicio de estado en vivo iniciado');
+
+    // Auto-reparación silenciosa de PINs corruptos (no molesta si todo está bien)
+    await repararHashesDePinCorruptos();
     
   } catch (error) {
     console.error('❌ Error inicializando:', error);
